@@ -105,6 +105,11 @@ func (ssh_conf *MakeConfig) Stream(command string) (output chan string, done cha
 	if err != nil {
 		return output, done, err
 	}
+
+	if err := session.RequestPty("xterm", 80, 24, ssh.TerminalModes{}); err != nil {
+		return output, done, err
+	}	
+
 	// connect to both outputs (they are of type io.Reader)
 	outReader, err := session.StdoutPipe()
 	if err != nil {
