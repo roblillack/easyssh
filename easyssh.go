@@ -65,13 +65,17 @@ func (ssh_conf *MakeConfig) connect() (*ssh.Session, error) {
 		auths = append(auths, ssh.Password(ssh_conf.Password))
 	}
 
+	if ssh_conf.Key != "" {
+		pubkey, err := getKeyFile(ssh_conf.Key);
+		if err != nil {
+			return nil, err
+		}
+		auths = append(auths, ssh.PublicKeys(pubkey))
+	}
+
 	if sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
 		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers))
 		defer sshAgent.Close()
-	}
-
-	if pubkey, err := getKeyFile(ssh_conf.Key); err == nil {
-		auths = append(auths, ssh.PublicKeys(pubkey))
 	}
 
 	config := &ssh.ClientConfig{
