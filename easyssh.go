@@ -12,7 +12,10 @@ import (
 	"net"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -33,16 +36,118 @@ type MakeConfig struct {
 	Password string
 }
 
+var sshCfgRegex = regexp.MustCompile(`\s*(\w+)\s+(\S+)\s*`)
+
+func NewConnection(target string) (*MakeConfig, error) {
+	cfg := &MakeConfig{}
+	overwriteUser:= false
+
+	currentUser, err := user.Current()
+	if err != nil {
+		return nil, fmt.Errorf("Error determining current user: %s", err)
+	}
+
+	if pos := strings.Index(target, "@"); pos != -1 {
+		cfg.User = target[0:pos]
+		cfg.Server = target[pos+1:]
+		overwriteUser = true
+	} else {
+		cfg.Server = target
+		cfg.User = currentUser.Username
+	}
+
+	file := path.Join(currentUser.HomeDir, ".ssh", "config")
+
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		return cfg, nil
+	}
+
+	if sshCfg, err := parseConfigFile(file, cfg.Server); err != nil {
+		return nil, fmt.Errorf("Error reading SSH config file '%s': %s", file, err)
+	} else if sshCfg != nil {
+		if overwriteUser {
+			sshCfg.User = cfg.User
+		}
+		return sshCfg, nil
+	}
+
+	return cfg, nil
+}
+
+func parseConfigFile(filename string, host string) (*MakeConfig, error) {
+	file, _ := os.Open(filename)
+	defer file.Close()
+
+	return parseClientConfig(file, host)
+}
+
+func parseClientConfig(reader io.Reader, host string) (*MakeConfig, error) {
+	var cfg *MakeConfig
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanLines) 
+  
+lines:
+	for scanner.Scan() {
+		m := sshCfgRegex.FindStringSubmatch(scanner.Text())
+		if len(m) != 3 {
+			continue
+		}
+
+		key := strings.ToLower(m[1])
+		value := m[2]
+
+		switch key {
+		case "host":
+			if cfg != nil {
+				break lines
+			}
+
+			if host == value {
+				cfg = &MakeConfig{Server: value, Port: "22"}
+			}
+
+		case "hostname":
+			if cfg!= nil {
+				cfg.Server = value
+			}
+			
+		case "user":
+			if cfg != nil {
+				cfg.User = value
+			}
+
+		case "identityfile":
+			if cfg == nil {
+				continue
+			}
+			if value[:2] == "~/" {
+				usr, err := user.Current()
+				if err != nil {
+					return nil, err
+				}
+				value = path.Join(usr.HomeDir, strings.Replace(value, "~/", "", 1))
+			}
+			cfg.Key = value
+
+		case "port":
+			if cfg != nil {
+				cfg.Port = value
+			}
+			/*port, err := strconv.Atoi(next.val)
+			if err != nil {
+				return nil, err
+			}*/
+		}
+	}
+
+	return cfg, nil
+}
+
 // returns ssh.Signer from user you running app home path + cutted key path.
 // (ex. pubkey,err := getKeyFile("/.ssh/id_rsa") )
 func getKeyFile(keypath string) (ssh.Signer, error) {
-	usr, err := user.Current()
-	if err != nil {
-		return nil, err
-	}
-
-	file := usr.HomeDir + keypath
-	buf, err := ioutil.ReadFile(file)
+	buf, err := ioutil.ReadFile(keypath)
 	if err != nil {
 		return nil, err
 	}
