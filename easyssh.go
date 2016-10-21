@@ -40,7 +40,7 @@ var sshCfgRegex = regexp.MustCompile(`\s*(\w+)\s+(\S+)\s*`)
 
 func NewConnection(target string) (*MakeConfig, error) {
 	cfg := &MakeConfig{}
-	overwriteUser:= false
+	overwriteUser := false
 
 	currentUser, err := user.Current()
 	if err != nil {
@@ -85,8 +85,8 @@ func parseClientConfig(reader io.Reader, host string) (*MakeConfig, error) {
 	var cfg *MakeConfig
 
 	scanner := bufio.NewScanner(reader)
-	scanner.Split(bufio.ScanLines) 
-  
+	scanner.Split(bufio.ScanLines)
+
 lines:
 	for scanner.Scan() {
 		m := sshCfgRegex.FindStringSubmatch(scanner.Text())
@@ -108,10 +108,10 @@ lines:
 			}
 
 		case "hostname":
-			if cfg!= nil {
+			if cfg != nil {
 				cfg.Server = value
 			}
-			
+
 		case "user":
 			if cfg != nil {
 				cfg.User = value
@@ -171,7 +171,7 @@ func (ssh_conf *MakeConfig) connect() (*ssh.Session, error) {
 	}
 
 	if ssh_conf.Key != "" {
-		pubkey, err := getKeyFile(ssh_conf.Key);
+		pubkey, err := getKeyFile(ssh_conf.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +213,7 @@ func (ssh_conf *MakeConfig) Stream(command string) (output chan string, done cha
 
 	if err := session.RequestPty("xterm", 80, 24, ssh.TerminalModes{}); err != nil {
 		return output, done, err
-	}	
+	}
 
 	// connect to both outputs (they are of type io.Reader)
 	outReader, err := session.StdoutPipe()
@@ -265,15 +265,13 @@ func (ssh_conf *MakeConfig) Run(command string) (outStr string, err error) {
 }
 
 // Scp uploads sourceFile to remote machine like native scp console app.
-func (ssh_conf *MakeConfig) Scp(sourceFile string) error {
+func (ssh_conf *MakeConfig) Upload(sourceFile, targetFile string) error {
 	session, err := ssh_conf.connect()
 
 	if err != nil {
 		return err
 	}
 	defer session.Close()
-
-	targetFile := filepath.Base(sourceFile)
 
 	src, srcErr := os.Open(sourceFile)
 
@@ -290,7 +288,7 @@ func (ssh_conf *MakeConfig) Scp(sourceFile string) error {
 	go func() {
 		w, _ := session.StdinPipe()
 
-		fmt.Fprintln(w, "C0644", srcStat.Size(), targetFile)
+		fmt.Fprintln(w, "C0644", srcStat.Size(), filepath.Base(targetFile))
 
 		if srcStat.Size() > 0 {
 			io.Copy(w, src)
