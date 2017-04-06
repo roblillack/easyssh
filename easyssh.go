@@ -29,17 +29,20 @@ import (
 // Note: easyssh looking for private key in user's home directory (ex. /home/john + Key).
 // Then ensure your Key begins from '/' (ex. /.ssh/id_rsa)
 type MakeConfig struct {
-	User     string
-	Server   string
-	Key      string
-	Port     string
-	Password string
+	User            string
+	Server          string
+	Key             string
+	Port            string
+	Password        string
+	HostKeyCallback ssh.HostKeyCallback
 }
 
 var sshCfgRegex = regexp.MustCompile(`\s*(\w+)\s+(\S+)\s*`)
 
 func NewConnection(target string) (*MakeConfig, error) {
-	cfg := &MakeConfig{}
+	cfg := &MakeConfig{
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
 	overwriteUser := false
 
 	currentUser, err := user.Current()
@@ -184,8 +187,9 @@ func (ssh_conf *MakeConfig) connect() (*ssh.Session, error) {
 	}
 
 	config := &ssh.ClientConfig{
-		User: ssh_conf.User,
-		Auth: auths,
+		User:            ssh_conf.User,
+		Auth:            auths,
+		HostKeyCallback: ssh_conf.HostKeyCallback,
 	}
 
 	client, err := ssh.Dial("tcp", ssh_conf.Server+":"+ssh_conf.Port, config)
