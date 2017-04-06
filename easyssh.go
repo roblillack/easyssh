@@ -34,6 +34,7 @@ type MakeConfig struct {
 	Key             string
 	Port            string
 	Password        string
+	KeyData         []byte
 	HostKeyCallback ssh.HostKeyCallback
 }
 
@@ -173,7 +174,13 @@ func (ssh_conf *MakeConfig) connect() (*ssh.Session, error) {
 		auths = append(auths, ssh.Password(ssh_conf.Password))
 	}
 
-	if ssh_conf.Key != "" {
+	if len(ssh_conf.KeyData) > 0 {
+		pubkey, err := ssh.ParsePrivateKey(ssh_conf.KeyData)
+		if err != nil {
+			return nil, err
+		}
+		auths = append(auths, ssh.PublicKeys(pubkey))
+	} else if ssh_conf.Key != "" {
 		pubkey, err := getKeyFile(ssh_conf.Key)
 		if err != nil {
 			return nil, err
